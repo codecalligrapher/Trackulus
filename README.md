@@ -1,0 +1,2 @@
+# Trackulus
+CLI Habit Tracking
