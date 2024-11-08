@@ -10,6 +10,7 @@ init_database() {
       BEGIN CREATE TABLE directory (
         habit_id INT NOT NULL IDENTITY PRIMARY KEY, 
         title VARCHAR(32) NOT NULL, 
+        times INT,
         period INT);
       END;
       """
@@ -25,6 +26,11 @@ init_database() {
         )
       END;
         """
+}
+
+list() {
+  source ./db.env
+  sqlcmd -S localhost -U $DB_USER -P $DB_PASSWORD -Q """USE habits; SELECT * FROM directory"""
 }
 
 create() {
