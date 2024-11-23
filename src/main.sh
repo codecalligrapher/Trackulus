@@ -35,7 +35,31 @@ list() {
 
 progress() {
   source ./db.env
-  sqlcmd -S localhost -U $DB_USER -P $DB_PASSWORD -Q """USE habits; SELECT * FROM directory d LEFT JOIN habit_logs l on d.habit_id=l.habit_id;"""
+  sqlcmd -S localhost -U $DB_USER -P $DB_PASSWORD -Q """
+USE habits; 
+with filtered_cte AS (
+  SELECT 
+    d.habit_id habit_id,
+    d.title title,
+    d.times times,
+    d.period period,
+    l.log_date log_date
+  FROM 
+    directory d LEFT JOIN habit_logs l 
+    ON d.habit_id = l.habit_id
+  WHERE 
+    log_date >= dateadd(day, -(d.period + 1), GETDATE()))
+  SELECT 
+  habit_id Habit_ID,
+  title Habit_Title,
+  times Number_of_Times_Expected,
+  period Period_Expected,
+  count(*) as Number_of_Times_Actual,
+  from filtered_cte group by habit_id, title, times, period;
+
+"""
+
+
 }
 
 create() {
