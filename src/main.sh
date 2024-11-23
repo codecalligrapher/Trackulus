@@ -33,6 +33,11 @@ list() {
   sqlcmd -S localhost -U $DB_USER -P $DB_PASSWORD -Q """USE habits; SELECT * FROM directory"""
 }
 
+progress() {
+  source ./db.env
+  sqlcmd -S localhost -U $DB_USER -P $DB_PASSWORD -Q """USE habits; SELECT * FROM directory d LEFT JOIN habit_logs l on d.habit_id=l.habit_id;"""
+}
+
 create() {
   while getopts 'n:p:' param; do
     case "${param}" in
@@ -66,15 +71,22 @@ create() {
 
 
 log() {
-  while getopts 'n:a:c:' param; do
+  while getopts 'i:c:' param; do
     case "${param}" in
-      n) NAME=${OPTARG} ;;
-      a) AMOUNT=${OPTARG} ;;
+      i) HABITID=${OPTARG} ;;
       c) COMMENT=${OPTARG}
     esac
   done;
-  printf "$NAME\n"
-  printf "$(date +%F) : $AMOUNT : ${COMMENT:\t}\n"
+  source ./db.env
+  sqlcmd -S localhost -U $DB_USER -P $DB_PASSWORD -Q """
+USE habits; 
+INSERT INTO habit_logs (habit_id, log_date)
+VALUES ($HABITID, GETDATE())
+"""
+  sqlcmd -S localhost -U $DB_USER -P $DB_PASSWORD -Q """
+USE habits;
+SELECT top 10 * from habit_logs WHERE habit_id = $HABITID ORDER BY log_date DESC;
+  """
 }
 
 "$@"
