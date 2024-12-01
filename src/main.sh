@@ -54,7 +54,7 @@ with filtered_cte AS (
   title Habit_Title,
   times Number_of_Times_Expected,
   period Period_Expected,
-  count(*) as Number_of_Times_Actual,
+  count(*) as Number_of_Times_Actual
   from filtered_cte group by habit_id, title, times, period;
 
 """
@@ -77,7 +77,6 @@ create() {
 
   if [[ -z "${PERIODICITY}" ]]; then
     PERIODICITY=0; # assume set to zero (daily)
-    # TODO: start supporting weekly/monthly periodicities
   fi;
 
   echo "${NAME}" "${PERIODICITY}";
@@ -111,6 +110,53 @@ VALUES ($HABITID, GETDATE())
 USE habits;
 SELECT top 10 * from habit_logs WHERE habit_id = $HABITID ORDER BY log_date DESC;
   """
+  source ./db.env
+  local HABITNAME=$(sqlcmd -S localhost -U $DB_USER -P $DB_PASSWORD -Q """SET NoCount ON; DECLARE @result varchar(max); USE habits; SELECT @result=title FROM directory WHERE habit_id= $HABITID; PRINT @result;""")
+
+  log_to_notion $HABITID "${HABITNAME:38}";
+}
+
+log_to_notion() {
+  local habitid=$1;
+  local habitname=$2;
+
+  echo $habitname;
+
+  curl -X POST 'https://api.notion.com/v1/pages' \
+  -H 'Authorization: Bearer '"$NOTION_API_KEY"'' \
+  -H 'Notion-Version: 2022-06-28' \
+  -H "Content-Type: application/json" \
+  --data '{
+    "parent": {
+        "type": "database_id",
+        "database_id": "1470dc796a3980cf991cda608caecb13"
+    },
+    "properties": {
+        "HabitID": {
+            "type": "title",
+            "title": [
+                {
+                    "type": "text",
+                    "text": {
+                        "content": "'$habitid'"
+                    }
+                }
+            ]
+        },        
+        "Habit Name": {
+            "type": "rich_text",
+            "rich_text": [
+                {
+                    "type": "text",
+                    "text": {
+                        "content": "'"$habitname"'"
+                    }
+                }
+            ]
+        }
+
+    }
+ }'
 }
 
 "$@"
