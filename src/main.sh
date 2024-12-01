@@ -33,9 +33,70 @@ list() {
   sqlcmd -S localhost -U $DB_USER -P $DB_PASSWORD -Q """USE habits; SELECT * FROM directory"""
 }
 
+longest_current_streak() {
+  source ./db.env
+  sqlcmd  -S localhost -U $DB_USER -P $DB_PASSWORD -m 1 -Q """
+  USE habits;
+  WITH DateSequence AS (
+    -- Group consecutive dates and assign a sequence number
+    SELECT 
+        habit_id,
+        log_date,
+        DATEDIFF(DAY, 
+            LAG(log_date, 1) OVER (PARTITION BY habit_id ORDER BY log_date), 
+            log_date
+        ) AS days_diff
+    FROM (
+        SELECT DISTINCT habit_id, log_date 
+        FROM habit_logs 
+    ) AS UniqueHabitDates
+),
+StreakGroups AS (
+    -- Identify continuous streaks
+    SELECT 
+        habit_id,
+        log_date,
+        days_diff,
+        SUM(CASE WHEN days_diff > 1 OR days_diff IS NULL THEN 1 ELSE 0 END) 
+            OVER (PARTITION BY habit_id ORDER BY log_date) AS streak_group
+    FROM DateSequence
+),
+Streaks AS (
+    -- Calculate streak lengths
+    SELECT 
+        habit_id,
+        streak_group,
+        COUNT(*) AS current_streak,
+        MAX(log_date) AS last_date
+    FROM StreakGroups
+    GROUP BY habit_id, streak_group
+),
+LongestCurrentStreak AS (
+    -- Find the longest current streak for each habit
+    SELECT 
+        s.habit_id,
+        d.title,
+        MAX(current_streak) AS longest_current_streak
+    FROM Streaks s
+    left join directory d ON d.habit_id = s.habit_id
+    WHERE s.last_date = (
+        SELECT MAX(log_date) 
+        FROM habit_logs ht 
+        WHERE ht.habit_id = s.habit_id
+    )
+    GROUP BY s.habit_id, d.title
+)
+SELECT 
+    habit_id, 
+    longest_current_streak,
+    title
+FROM LongestCurrentStreak;
+  """
+}
+
 progress() {
   source ./db.env
-  sqlcmd -S localhost -U $DB_USER -P $DB_PASSWORD -Q """
+  sqlcmd -m 1 -S localhost -U $DB_USER -P $DB_PASSWORD -Q """
 USE habits; 
 with filtered_cte AS (
   SELECT 
@@ -56,8 +117,8 @@ with filtered_cte AS (
   period Period_Expected,
   count(*) as Number_of_Times_Actual
   from filtered_cte group by habit_id, title, times, period;
-
 """
+longest_current_streak
 
 
 }
@@ -106,10 +167,7 @@ USE habits;
 INSERT INTO habit_logs (habit_id, log_date)
 VALUES ($HABITID, GETDATE())
 """
-  sqlcmd -S localhost -U $DB_USER -P $DB_PASSWORD -Q """
-USE habits;
-SELECT top 10 * from habit_logs WHERE habit_id = $HABITID ORDER BY log_date DESC;
-  """
+
   source ./db.env
   local HABITNAME=$(sqlcmd -S localhost -U $DB_USER -P $DB_PASSWORD -Q """SET NoCount ON; DECLARE @result varchar(max); USE habits; SELECT @result=title FROM directory WHERE habit_id= $HABITID; PRINT @result;""")
 
